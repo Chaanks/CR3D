@@ -1,0 +1,9 @@
+[package]
+name = "CR3D"
+version = "0.1.0"
+authors = ["cham0 <jarod8405@gmail.com>"]
+
+[dependencies]
+glium = { version = "0.22", default-features = true }
+imgui = "0.0.20"
+imgui-glium-renderer = "0.0.20"
