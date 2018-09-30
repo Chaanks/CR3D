@@ -11,7 +11,7 @@ use glm;
 
 #[derive(Copy, Clone)]
 pub struct Vertex {
-    pub position: [f32; 2],
+    pub position: [f32; 3],
     pub tex_coords: [f32; 2],
 }
 implement_vertex!(Vertex, position, tex_coords);
@@ -38,6 +38,7 @@ pub struct Polygon {
     pub color: Color,
     pub data: Vec<Vertex>,
     pub texture: Texture2d,
+    pub position: glm::Mat4x4,
 }
 
 impl Polygon {
@@ -47,21 +48,21 @@ impl Polygon {
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
 
         let vertex_shader_src = r#"
-            #version 140
+            #version 150
             #extension GL_KHR_vulkan_glsl : enable
 
-            in vec2 position;
+            in vec3 position;
             in vec2 tex_coords;
             out vec3 color;
             out vec2 v_tex_coords;
 
             uniform vec3 tcolor;
-            uniform mat4 matrix;
+            uniform mat4 model;
 
             void main() {
                 color = tcolor;
                 v_tex_coords = tex_coords;
-                gl_Position = matrix * vec4(position, 0.0, 1.0);
+                gl_Position = model * vec4(position, 1.0);
             }
         "#;
 
@@ -81,6 +82,9 @@ impl Polygon {
         let program = glium::Program::from_source(display, vertex_shader_src, fragment_shader_src, None)
             .expect("Failed to create program");
 
+        let position = glm::identity();
+
+
         Self {
             vertex_buffer,
             indices,
@@ -88,19 +92,35 @@ impl Polygon {
             color,
             data,
             texture,
+            position,
         }
     }
 
     pub fn draw(&mut self, target: &mut Frame) {
-        let matrix = [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0f32],
-        ];
+
+        let params = glium::DrawParameters {
+            depth: glium::Depth {
+                test: glium::draw_parameters::DepthTest::IfLess,
+                write: true,
+                .. Default::default()
+            },
+            .. Default::default()
+        };
+        
+        let (width, height) = target.get_dimensions();
+        let aspect_ratio = height as f32 / width as f32;
+        let fov: f32 = 45.0;
+        let near = 0.1;
+        let far = 100.0;
+
+        let projection = glm::perspective(fov.to_radians(), aspect_ratio, near, far);
+        let view = glm::look_at_rh(&glm::vec3(0.0,0.0,5.0), &glm::vec3(0.0,0.0,0.0), &glm::vec3(0.0,1.0,0.0));
+        let mvp = projection * view * self.position;
+
+        let mvp_ref: &[[f32; 4]; 4] = mvp.as_ref();
 
         target.draw(&self.vertex_buffer, &self.indices, &self.program,
-                    &uniform! {tcolor : self.color.rgb, matrix: matrix, text: &self.texture}, &Default::default()).expect("Failed to draw");
+                    &uniform! {tcolor : self.color.rgb, model: *mvp_ref}, &params).expect("Failed to draw");
     }
 
     pub fn new_texture(path: String, display: &Display) -> Issue<Texture2d> {
@@ -112,6 +132,31 @@ impl Polygon {
 
         Ok(texture)
     }
+
+    pub fn scale(&mut self, x: f32, y:f32, z:f32) {
+        let scale_matrix = glm::scale(&self.position, &glm::vec3(x,y,z));
+        self.position = scale_matrix;
+    }
+
+    pub fn translate(&mut self, x: f32, y:f32, z:f32) {
+        let scale_matrix = glm::translate(&self.position, &glm::vec3(x,y,z));
+        self.position = scale_matrix;
+    }
+
+    pub fn rotate_x(&mut self, angle: f32) {
+        let rotate_matrix = glm::rotate_x(&self.position, angle.to_radians());
+        self.position = rotate_matrix;
+    }
+
+    pub fn rotate_y(&mut self, angle: f32) {
+        let rotate_matrix = glm::rotate_y(&self.position, angle.to_radians());
+        self.position = rotate_matrix;
+    }
+
+    pub fn rotate_z(&mut self, angle: f32) {
+        let rotate_matrix = glm::rotate_z(&self.position, angle.to_radians());
+        self.position = rotate_matrix;
+    }
 }
 
 pub struct Model {
@@ -120,6 +165,7 @@ pub struct Model {
     pub program: glium::Program,
     pub scale: f32,
     pub light: [f32; 3],
+    pub position: glm::Mat4x4,
 }
 
 impl Model {
@@ -135,14 +181,11 @@ impl Model {
             in vec3 normal;
             out vec3 v_normal;
 
-            uniform mat4 perspective;
-            uniform mat4 view;
-            uniform mat4 matrix;
+            uniform mat4 model;
 
             void main() {
-                mat4 modelview = view * matrix;
                 v_normal = normal;
-                gl_Position = perspective * modelview * vec4(position, 1.0);
+                gl_Position = model * vec4(position, 1.0);
             }
         "#;
 
@@ -168,12 +211,15 @@ impl Model {
         // the direction of the light
         let light = [-1.0, -1.0, 1.0f32];
         
+        let position = glm::identity();
+
         Self {
             vertex_buffer,
             indices,
             program,
             scale,
             light,
+            position,
         }
 
     }
@@ -189,27 +235,20 @@ impl Model {
             .. Default::default()
         };
 
-        let scaling = self.scale;
-        let matrix = [
-            [scaling, 0.0, 0.0, 0.0],
-            [0.0, scaling, 0.0, 0.0],
-            [0.0, 0.0, scaling , 0.0],
-            [0.0, 0.0, -2.5, 1.0f32],
-        ];
-
         let (width, height) = target.get_dimensions();
         let aspect_ratio = height as f32 / width as f32;
-        let projection = glm::perspective(3.141592 / 3.0, aspect_ratio, 0.1, 1024.0);
-        let projection_ref: &[[f32; 4]; 4] = projection.as_ref();
+        let fov: f32 = 45.0;
+        let near = 0.1;
+        let far = 100.0;
 
-        let eye = glm::vec3(2.0, -1.0, -1.0);
-        let center = glm::vec3(1.0, 1.0, -2.0);
-        let up = glm::vec3(0.0, 1.0, 1.0);
-        let view = glm::look_at_rh(&eye, &center, &up);
-        let view_ref: &[[f32; 4]; 4] = view.as_ref();
+        let projection = glm::perspective(fov.to_radians(), aspect_ratio, near, far);
+        let view = glm::look_at_rh(&glm::vec3(0.0,0.0,3.0), &glm::vec3(0.0,0.0,0.0), &glm::vec3(0.0,1.0,0.0));
+        let mvp = projection * view * self.position;
+
+        let mvp_ref: &[[f32; 4]; 4] = mvp.as_ref();
 
         target.draw(&self.vertex_buffer, &self.indices, &self.program,
-                    &uniform! {matrix: matrix, u_light: self.light, perspective: *projection_ref, view: *view_ref }, &params).expect("Failed to draw");
+                    &uniform! {model: *mvp_ref, u_light: self.light}, &params).expect("Failed to draw");
     }
 
     fn load_model(display: &glium::Display, path: String) -> (VertexBufferAny, f32) {
@@ -274,5 +313,30 @@ impl Model {
             .unwrap()
             .into_vertex_buffer_any(),
         scale)
+    }
+
+    pub fn scale(&mut self, x: f32, y:f32, z:f32) {
+        let scale_matrix = glm::scale(&self.position, &glm::vec3(x,y,z));
+        self.position = scale_matrix;
+    }
+
+    pub fn translate(&mut self, x: f32, y:f32, z:f32) {
+        let scale_matrix = glm::translate(&self.position, &glm::vec3(x,y,z));
+        self.position = scale_matrix;
+    }
+
+    pub fn rotate_x(&mut self, angle: f32) {
+        let rotate_matrix = glm::rotate_x(&self.position, angle.to_radians());
+        self.position = rotate_matrix;
+    }
+
+    pub fn rotate_y(&mut self, angle: f32) {
+        let rotate_matrix = glm::rotate_y(&self.position, angle.to_radians());
+        self.position = rotate_matrix;
+    }
+
+    pub fn rotate_z(&mut self, angle: f32) {
+        let rotate_matrix = glm::rotate_z(&self.position, angle.to_radians());
+        self.position = rotate_matrix;
     }
 }

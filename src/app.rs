@@ -14,7 +14,7 @@ use graphics::Color;
 use glium::glutin::EventsLoop;
 use event::EventHandler;
 use error::Issue;
-use overlay;
+use overlay::Overlay;
 
 
 pub struct App {
