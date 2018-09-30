@@ -7,7 +7,7 @@ pub struct Conf {
 
 // Config is used to specify window setup
 impl Conf {
-    pub fn new(title: String, height: f64, width: f64, vsync: bool) -> Self {
+    pub fn new(title: String, width: f64, height: f64, vsync: bool) -> Self {
         Self {
             title,
             width,

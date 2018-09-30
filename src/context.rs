@@ -24,6 +24,7 @@ impl Context {
     pub fn new(conf: Conf) -> Issue<(Self, EventsLoop)> {
         let mut events_loop = EventsLoop::new();
         let context = ContextBuilder::new()
+            .with_depth_buffer(24)
             .with_vsync(conf.vsync);
         let window = WindowBuilder::new()
             .with_title(conf.title)
