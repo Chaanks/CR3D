@@ -1,6 +1,6 @@
 use glium::Surface;
 use glium::glutin;
-use glium::glutin::{Event, MouseButton, MouseScrollDelta, TouchPhase};
+use glium::glutin::{Event, MouseButton, MouseScrollDelta, TouchPhase, VirtualKeyCode, KeyboardInput};
 use glium::glutin::ElementState::Pressed;
 use imgui::*;
 use imgui;
@@ -54,6 +54,10 @@ impl App {
                             MouseButton::Middle => ctx.mouse_context.pressed.2 = state == Pressed,
                             _ => {}
                         },
+                        glutin::WindowEvent::KeyboardInput {input, ..} => match input.virtual_keycode {
+                            Some(VirtualKeyCode) => state.key_down_event(ctx, VirtualKeyCode),
+                            _ => {}
+                        },
                         _ => (),
                     },
 
@@ -70,5 +74,7 @@ impl App {
 
         Ok(())
     }
+
+
 }
 

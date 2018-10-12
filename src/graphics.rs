@@ -7,6 +7,7 @@ use std::io::Cursor;
 use std::path::Path;
 use std::f32;
 use tobj;
+use camera::Camera;
 use glm;
 
 #[derive(Copy, Clone)]
@@ -96,7 +97,7 @@ impl Polygon {
         }
     }
 
-    pub fn draw(&mut self, target: &mut Frame) {
+    pub fn draw(&mut self, target: &mut Frame, view: &mut Camera) {
 
         let params = glium::DrawParameters {
             depth: glium::Depth {
@@ -114,8 +115,9 @@ impl Polygon {
         let far = 100.0;
 
         let projection = glm::perspective(fov.to_radians(), aspect_ratio, near, far);
-        let view = glm::look_at_rh(&glm::vec3(0.0,0.0,5.0), &glm::vec3(0.0,0.0,0.0), &glm::vec3(0.0,1.0,0.0));
-        let mvp = projection * view * self.position;
+
+        //let view = glm::look_at_rh(&glm::vec3(0.0,0.0,5.0), &glm::vec3(0.0,0.0,0.0), &glm::vec3(0.0,1.0,0.0));
+        let mvp = projection * view.camera * self.position;
 
         let mvp_ref: &[[f32; 4]; 4] = mvp.as_ref();
 
